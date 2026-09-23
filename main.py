@@ -63,6 +63,12 @@ def format_month(month_key: str) -> str:
     return f"{MONTH_NAMES[int(month) - 1]} {year}"
 
 
+def format_month_short(month_key: str) -> str:
+    year, month = month_key.split("-")
+    short_names = ("Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des")
+    return f"{short_names[int(month) - 1]} {year}"
+
+
 def is_allowed_user(interaction: discord.Interaction) -> bool:
     return interaction.user.id == ALLOWED_USER_ID
 
@@ -477,7 +483,7 @@ async def analisis(interaction: discord.Interaction) -> None:
     )
     formatted_data = [
         (
-            format_month(month),
+            format_month_short(month),
             format_rupiah_table(income),
             format_rupiah_table(expense),
             format_rupiah_table(balance),
@@ -489,14 +495,14 @@ async def analisis(interaction: discord.Interaction) -> None:
     expense_width = max(len("PENGELUARAN"), *(len(row[2]) for row in formatted_data))
     balance_width = max(len("SALDO"), *(len(row[3]) for row in formatted_data))
     detail_lines = [
-        f"{month:<{month_width}} | {income:<{income_width}} | "
-        f"{expense:<{expense_width}} | {balance:<{balance_width}}"
+        f"{month:<{month_width}}|{income:<{income_width}}|"
+        f"{expense:<{expense_width}}|{balance:<{balance_width}}"
         for month, income, expense, balance in formatted_data
     ]
     chunks = []
     table_header = (
-        f"{'BULAN':<{month_width}} | {'PEMASUKAN':<{income_width}} | "
-        f"{'PENGELUARAN':<{expense_width}} | {'SALDO':<{balance_width}}\n"
+        f"{'BULAN':<{month_width}}|{'MASUK':<{income_width}}|"
+        f"{'KELUAR':<{expense_width}}|{'SALDO':<{balance_width}}\n"
     )
     table_separator = (
         "-" * month_width + "-+-" + "-" * income_width + "-+-"
