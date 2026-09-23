@@ -1,0 +1,10 @@
+services:
+  tracefund:
+    build: .
+    container_name: tracefund-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./tracefund.db:/app/tracefund.db
+    network_mode: default
