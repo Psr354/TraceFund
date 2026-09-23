@@ -42,7 +42,8 @@ def initialize_database() -> None:
 
 
 def format_rupiah(amount: int) -> str:
-    return f"Rp{amount:,.0f}".replace(",", ".")
+    sign = "-" if amount < 0 else ""
+    return f"{sign}Rp{abs(amount):,.0f}".replace(",", ".")
 
 
 def format_month(month_key: str) -> str:
@@ -392,19 +393,23 @@ async def analisis(interaction: discord.Interaction) -> None:
         ephemeral=True,
     )
     detail_lines = [
-        f"{format_month(month)} | masuk {format_rupiah(income)} | "
-        f"keluar {format_rupiah(expense)} | saldo {format_rupiah(balance)}"
+        f"{format_month(month):<17}"
+        f"{format_rupiah(income):>14}"
+        f"{format_rupiah(expense):>16}"
+        f"{format_rupiah(balance):>14}"
         for month, income, expense, balance in month_data
     ]
     chunks = []
-    current_chunk = "**Detail Semua Bulan**\n"
+    table_header = "BULAN              PEMASUKAN      PENGELUARAN         SALDO\n"
+    table_separator = "-" * len(table_header.rstrip()) + "\n"
+    current_chunk = "**Detail Semua Bulan**\n```text\n" + table_header + table_separator
     for line in detail_lines:
-        if len(current_chunk) + len(line) + 1 > 1800:
-            chunks.append(current_chunk)
-            current_chunk = "**Detail Semua Bulan (lanjutan)**\n"
+        if len(current_chunk) + len(line) + 4 > 1800:
+            chunks.append(current_chunk + "```")
+            current_chunk = "**Detail Semua Bulan (lanjutan)**\n```text\n" + table_header + table_separator
         current_chunk += line + "\n"
     if current_chunk.strip():
-        chunks.append(current_chunk)
+        chunks.append(current_chunk + "```")
     for chunk in chunks:
         await interaction.followup.send(chunk, ephemeral=True)
 
