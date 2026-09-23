@@ -42,7 +42,7 @@ def initialize_database() -> None:
 
 
 def format_rupiah(amount: int) -> str:
-    sign = "- " if amount < 0 else ""
+    sign = "-" if amount < 0 else ""
     return f"{sign}Rp{abs(amount):,.0f}".replace(",", ".")
 
 
