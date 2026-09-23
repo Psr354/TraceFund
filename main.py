@@ -42,8 +42,15 @@ def initialize_database() -> None:
 
 
 def format_rupiah(amount: int) -> str:
-    sign = "-" if amount < 0 else ""
+    sign = "- " if amount < 0 else ""
     return f"{sign}Rp{abs(amount):,.0f}".replace(",", ".")
+
+
+def format_rupiah_aligned(amount: int, width: int) -> str:
+    value = format_rupiah(amount)
+    if amount >= 0:
+        value = "  " + value
+    return f"{value:<{width}}"
 
 
 def format_month(month_key: str) -> str:
@@ -178,16 +185,53 @@ async def riwayat(
         else:
             expense += amount
             expense_count += 1
-        lines.append(
-            f"`#{transaction_id}` {date[:10]} | {transaction_type:<6} | "
-            f"{format_rupiah(amount):>12} | {description}"
-        )
     summary = (
         f"**{period}**\n"
         f"Pemasukan ({income_count}): {format_rupiah(income)}\n"
         f"Pengeluaran ({expense_count}): {format_rupiah(expense)}\n"
         f"Saldo: {format_rupiah(income - expense)}\n\n"
     )
+    if period_filtered:
+        income_rows = [
+            (transaction_id, date[:10], amount, description)
+            for transaction_id, date, transaction_type, amount, description in rows
+            if transaction_type == "masuk"
+        ]
+        expense_rows = [
+            (transaction_id, date[:10], amount, description)
+            for transaction_id, date, transaction_type, amount, description in rows
+            if transaction_type == "keluar"
+        ]
+        row_count = max(len(income_rows), len(expense_rows))
+        income_width = max(12, *(len(format_rupiah(amount)) for _, _, amount, _ in income_rows))
+        expense_width = max(12, *(len(format_rupiah(amount)) for _, _, amount, _ in expense_rows))
+        left_values = [
+            f"#{transaction_id} {date} {format_rupiah_aligned(amount, income_width)} {description}"
+            for transaction_id, date, amount, description in income_rows
+        ]
+        right_values = [
+            f"#{transaction_id} {date} {format_rupiah_aligned(amount, expense_width)} {description}"
+            for transaction_id, date, amount, description in expense_rows
+        ]
+        left_width = max(38, len("PEMASUKAN"), *(len(value) for value in left_values))
+        right_width = max(38, len("PENGELUARAN"), *(len(value) for value in right_values))
+        table_lines = [
+            f"{'PEMASUKAN':<{left_width}} | PENGELUARAN",
+            "-" * left_width + "-+-" + "-" * right_width,
+        ]
+        for index in range(row_count):
+            left = left_values[index] if index < len(left_values) else ""
+            right = right_values[index] if index < len(right_values) else ""
+            table_lines.append(f"{left:<{left_width}} | {right}")
+        table = "```text\n" + "\n".join(table_lines) + "\n```"
+        await interaction.response.send_message(summary + table, ephemeral=True)
+        return
+
+    lines = [
+        f"`#{transaction_id}` {date[:10]} | {transaction_type:<6} | "
+        f"{format_rupiah(amount):>12} | {description}"
+        for transaction_id, date, transaction_type, amount, description in rows
+    ]
     chunks = []
     current_chunk = summary
     for line in lines:
@@ -441,10 +485,13 @@ async def analisis(interaction: discord.Interaction) -> None:
     ]
     chunks = []
     table_header = (
-        f"{'BULAN':<{month_width}}  {'PEMASUKAN':<{income_width}}  "
-        f"{'PENGELUARAN':<{expense_width}}  {'SALDO':<{balance_width}}\n"
+        f"{'BULAN':<{month_width}} | {'PEMASUKAN':<{income_width}} | "
+        f"{'PENGELUARAN':<{expense_width}} | {'SALDO':<{balance_width}}\n"
     )
-    table_separator = "-" * len(table_header.rstrip()) + "\n"
+    table_separator = (
+        "-" * month_width + "-+-" + "-" * income_width + "-+-"
+        + "-" * expense_width + "-+-" + "-" * balance_width + "\n"
+    )
     current_chunk = "**Detail Semua Bulan**\n```text\n" + table_header + table_separator
     for line in detail_lines:
         if len(current_chunk) + len(line) + 4 > 1800:
