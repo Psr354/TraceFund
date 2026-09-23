@@ -53,6 +53,11 @@ def format_rupiah_aligned(amount: int, width: int) -> str:
     return f"{value:<{width}}"
 
 
+def format_rupiah_table(amount: int) -> str:
+    value = format_rupiah(amount)
+    return value if amount < 0 else "  " + value
+
+
 def format_month(month_key: str) -> str:
     year, month = month_key.split("-")
     return f"{MONTH_NAMES[int(month) - 1]} {year}"
@@ -471,7 +476,12 @@ async def analisis(interaction: discord.Interaction) -> None:
         ephemeral=True,
     )
     formatted_data = [
-        (format_month(month), format_rupiah(income), format_rupiah(expense), format_rupiah(balance))
+        (
+            format_month(month),
+            format_rupiah_table(income),
+            format_rupiah_table(expense),
+            format_rupiah_table(balance),
+        )
         for month, income, expense, balance in month_data
     ]
     month_width = max(len("BULAN"), *(len(row[0]) for row in formatted_data))
@@ -479,8 +489,8 @@ async def analisis(interaction: discord.Interaction) -> None:
     expense_width = max(len("PENGELUARAN"), *(len(row[2]) for row in formatted_data))
     balance_width = max(len("SALDO"), *(len(row[3]) for row in formatted_data))
     detail_lines = [
-        f"{month:<{month_width}}  {income:<{income_width}}  "
-        f"{expense:<{expense_width}}  {balance:<{balance_width}}"
+        f"{month:<{month_width}} | {income:<{income_width}} | "
+        f"{expense:<{expense_width}} | {balance:<{balance_width}}"
         for month, income, expense, balance in formatted_data
     ]
     chunks = []
