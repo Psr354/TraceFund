@@ -213,27 +213,20 @@ async def riwayat(
             for transaction_id, date, transaction_type, amount, description in rows
             if transaction_type == "keluar"
         ]
-        row_count = max(len(income_rows), len(expense_rows))
         income_width = max(12, *(len(format_rupiah(amount)) for _, _, amount, _ in income_rows))
         expense_width = max(12, *(len(format_rupiah(amount)) for _, _, amount, _ in expense_rows))
-        left_values = [
+        income_values = [
             f"#{transaction_id} {date} {format_rupiah_aligned(amount, income_width)} {description}"
             for transaction_id, date, amount, description in income_rows
         ]
-        right_values = [
+        expense_values = [
             f"#{transaction_id} {date} {format_rupiah_aligned(amount, expense_width)} {description}"
             for transaction_id, date, amount, description in expense_rows
         ]
-        left_width = max(38, len("PEMASUKAN"), *(len(value) for value in left_values))
-        right_width = max(38, len("PENGELUARAN"), *(len(value) for value in right_values))
-        table_lines = [
-            f"{'PEMASUKAN':<{left_width}} | PENGELUARAN",
-            "-" * left_width + "-+-" + "-" * right_width,
-        ]
-        for index in range(row_count):
-            left = left_values[index] if index < len(left_values) else ""
-            right = right_values[index] if index < len(right_values) else ""
-            table_lines.append(f"{left:<{left_width}} | {right}")
+        table_lines = ["PEMASUKAN", "-" * 12]
+        table_lines.extend(income_values or ["Tidak ada transaksi."])
+        table_lines.extend(["", "PENGELUARAN", "-" * 12])
+        table_lines.extend(expense_values or ["Tidak ada transaksi."])
         table = "```text\n" + "\n".join(table_lines) + "\n```"
         await interaction.response.send_message(summary + table, ephemeral=True)
         return
