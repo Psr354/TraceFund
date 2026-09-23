@@ -1,4 +1,6 @@
 import logging
+import csv
+import io
 import os
 import sqlite3
 from datetime import datetime
@@ -18,12 +20,32 @@ if not DISCORD_TOKEN:
     raise RuntimeError("DISCORD_TOKEN belum diisi di file .env")
 
 DATABASE_PATH = "tracefund.db"
+BACKUP_DIR = "backups"
+BACKUP_RETENTION = 30
 MONTH_NAMES = (
     "Januari", "Februari", "Maret", "April", "Mei", "Juni",
     "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 )
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("tracefund")
+
+
+def create_database_backup() -> None:
+    if not os.path.exists(DATABASE_PATH):
+        return
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = os.path.join(BACKUP_DIR, f"tracefund-{timestamp}.db")
+    with sqlite3.connect(DATABASE_PATH) as source, sqlite3.connect(backup_path) as target:
+        source.backup(target)
+    backups = sorted(
+        (os.path.join(BACKUP_DIR, name) for name in os.listdir(BACKUP_DIR) if name.endswith(".db")),
+        key=os.path.getmtime,
+        reverse=True,
+    )
+    for old_backup in backups[BACKUP_RETENTION:]:
+        os.remove(old_backup)
+    logger.info("Backup database dibuat: %s", backup_path)
 
 
 def initialize_database() -> None:
@@ -39,6 +61,19 @@ def initialize_database() -> None:
             month TEXT PRIMARY KEY,
             amount INTEGER NOT NULL CHECK(amount > 0)
         )""")
+    create_database_backup()
+
+
+def get_running_balances(connection: sqlite3.Connection) -> dict[int, int]:
+    balance = 0
+    balances = {}
+    rows = connection.execute(
+        "SELECT id, type, amount FROM transactions ORDER BY date ASC, id ASC"
+    ).fetchall()
+    for transaction_id, transaction_type, amount in rows:
+        balance += amount if transaction_type == "masuk" else -amount
+        balances[transaction_id] = balance
+    return balances
 
 
 def format_rupiah(amount: int) -> str:
@@ -176,6 +211,7 @@ async def riwayat(
             + limit_clause,
             parameters,
         ).fetchall()
+        running_balances = get_running_balances(connection)
     if not rows:
         await interaction.response.send_message("Tidak ada transaksi pada periode tersebut.", ephemeral=True)
         return
@@ -221,7 +257,13 @@ async def riwayat(
         ]
         expense_values = [
             f"#{transaction_id} {date} {format_rupiah_aligned(amount, expense_width)} {description}"
+            f" | saldo {format_rupiah(running_balances[transaction_id])}"
             for transaction_id, date, amount, description in expense_rows
+        ]
+        income_values = [
+            f"#{transaction_id} {date} {format_rupiah_aligned(amount, income_width)} {description}"
+            f" | saldo {format_rupiah(running_balances[transaction_id])}"
+            for transaction_id, date, amount, description in income_rows
         ]
         table_lines = ["PEMASUKAN", "-" * 12]
         table_lines.extend(income_values or ["Tidak ada transaksi."])
@@ -233,7 +275,7 @@ async def riwayat(
 
     lines = [
         f"`#{transaction_id}` {date[:10]} | {transaction_type:<6} | "
-        f"{format_rupiah(amount):>12} | {description}"
+        f"{format_rupiah(amount):>12} | saldo {format_rupiah(running_balances[transaction_id])} | {description}"
         for transaction_id, date, transaction_type, amount, description in rows
     ]
     chunks = []
@@ -248,6 +290,105 @@ async def riwayat(
     await interaction.response.send_message(chunks[0], ephemeral=True)
     for chunk in chunks[1:]:
         await interaction.followup.send(chunk, ephemeral=True)
+
+
+@client.tree.command(name="export", description="Export transaksi ke file CSV")
+@app_commands.describe(bulan="Opsional: bulan 1-12", tahun="Opsional: tahun")
+async def export(
+    interaction: discord.Interaction, bulan: int | None = None, tahun: int | None = None
+) -> None:
+    if not is_allowed_user(interaction):
+        await reject_unauthorized(interaction)
+        return
+    if bulan is not None and not 1 <= bulan <= 12:
+        await interaction.response.send_message("Bulan harus 1-12.", ephemeral=True)
+        return
+    if tahun is not None and not 2000 <= tahun <= 2100:
+        await interaction.response.send_message("Tahun harus valid.", ephemeral=True)
+        return
+
+    now = datetime.now()
+    filters = []
+    parameters: list[str] = []
+    if bulan is None and tahun is None:
+        bulan = now.month
+        tahun = now.year
+    if tahun is not None:
+        filters.append("date LIKE ?")
+        parameters.append(f"{tahun:04d}-%" if bulan is None else f"{tahun:04d}-{bulan:02d}-%")
+    elif bulan is not None:
+        filters.append("date LIKE ?")
+        parameters.append(f"{now.year:04d}-{bulan:02d}-%")
+
+    where_clause = f" WHERE {' AND '.join(filters)}" if filters else ""
+    with sqlite3.connect(DATABASE_PATH) as connection:
+        rows = connection.execute(
+            "SELECT id, date, type, amount, description FROM transactions"
+            + where_clause
+            + " ORDER BY date ASC, id ASC",
+            parameters,
+        ).fetchall()
+        running_balances = get_running_balances(connection)
+    if not rows:
+        await interaction.response.send_message("Tidak ada transaksi pada periode tersebut.", ephemeral=True)
+        return
+
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(("ID", "Tanggal", "Tipe", "Nominal", "Deskripsi", "Saldo berjalan"))
+    for transaction_id, date, transaction_type, amount, description in rows:
+        writer.writerow((
+            transaction_id,
+            date,
+            transaction_type,
+            amount,
+            description,
+            running_balances[transaction_id],
+        ))
+    if bulan is not None:
+        period = f"{MONTH_NAMES[bulan - 1]} {tahun or now.year}"
+        filename = f"tracefund-{tahun or now.year}-{bulan:02d}.csv"
+    else:
+        period = f"tahun {tahun}"
+        filename = f"tracefund-{tahun}.csv"
+    file = discord.File(io.BytesIO(output.getvalue().encode("utf-8-sig")), filename=filename)
+    await interaction.response.send_message(
+        f"Laporan {period} berhasil dibuat.", file=file, ephemeral=True
+    )
+
+
+class DeleteConfirmationView(discord.ui.View):
+    def __init__(self, transaction_id: int, user_id: int) -> None:
+        super().__init__(timeout=60)
+        self.transaction_id = transaction_id
+        self.user_id = user_id
+        self.message: discord.Message | None = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("Konfirmasi ini bukan untuk akunmu.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Konfirmasi hapus", style=discord.ButtonStyle.danger)
+    async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        with sqlite3.connect(DATABASE_PATH) as connection:
+            cursor = connection.execute("DELETE FROM transactions WHERE id = ?", (self.transaction_id,))
+        for item in self.children:
+            item.disabled = True
+        if cursor.rowcount == 0:
+            message = "Transaksi sudah tidak ditemukan."
+        else:
+            message = f"Transaksi #{self.transaction_id} berhasil dihapus."
+        await interaction.response.edit_message(content=message, view=self)
+        self.stop()
+
+    @discord.ui.button(label="Batal", style=discord.ButtonStyle.secondary)
+    async def cancel_delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="Penghapusan dibatalkan.", view=self)
+        self.stop()
 
 
 @client.tree.command(name="ubah", description="Ubah transaksi berdasarkan ID")
@@ -277,11 +418,22 @@ async def hapus(interaction: discord.Interaction, id_transaksi: int) -> None:
         await reject_unauthorized(interaction)
         return
     with sqlite3.connect(DATABASE_PATH) as connection:
-        cursor = connection.execute("DELETE FROM transactions WHERE id = ?", (id_transaksi,))
-    if cursor.rowcount == 0:
+        transaction = connection.execute(
+            "SELECT date, type, amount, description FROM transactions WHERE id = ?",
+            (id_transaksi,),
+        ).fetchone()
+    if transaction is None:
         await interaction.response.send_message("Transaksi dengan ID tersebut tidak ditemukan.", ephemeral=True)
         return
-    await interaction.response.send_message(f"Transaksi #{id_transaksi} berhasil dihapus.", ephemeral=True)
+    date, transaction_type, amount, description = transaction
+    view = DeleteConfirmationView(id_transaksi, interaction.user.id)
+    await interaction.response.send_message(
+        f"Yakin hapus transaksi #{id_transaksi}?\n"
+        f"{date[:10]} | {transaction_type} | {format_rupiah(amount)} | {description}",
+        view=view,
+        ephemeral=True,
+    )
+    view.message = await interaction.original_response()
 
 
 def validate_period(bulan: int | None, tahun: int | None) -> bool:

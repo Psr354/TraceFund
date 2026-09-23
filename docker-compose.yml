@@ -7,4 +7,5 @@ services:
       - .env
     volumes:
       - ./tracefund.db:/app/tracefund.db
+      - ./backups:/app/backups
     network_mode: default

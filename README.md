@@ -15,6 +15,7 @@ Bot hanya dapat digunakan oleh satu Discord user yang ID-nya ditentukan melalui 
 | `/analisis` | Menganalisis seluruh bulan |
 | `/tahunan` | Melihat total pemasukan dan pengeluaran dalam satu tahun |
 | `/riwayat` | Melihat transaksi terakhir |
+| `/export` | Mengunduh laporan transaksi CSV |
 | `/ubah` | Mengubah transaksi berdasarkan ID |
 | `/hapus` | Menghapus transaksi berdasarkan ID |
 | `/budget` | Menetapkan budget pengeluaran bulanan |
@@ -286,6 +287,8 @@ Filter berdasarkan tahun untuk melihat semua transaksi dalam satu tahun:
 
 Jika detail terlalu panjang, bot membaginya menjadi beberapa pesan ephemeral.
 
+Setiap baris transaksi juga menampilkan saldo berjalan setelah transaksi tersebut.
+
 Contoh hasil:
 
 ```text
@@ -312,7 +315,35 @@ Menghapus transaksi berdasarkan ID.
 /hapus id_transaksi:518
 ```
 
-Penghapusan langsung dilakukan. Gunakan `/riwayat` terlebih dahulu untuk memastikan ID yang benar.
+Gunakan `/riwayat` terlebih dahulu untuk memastikan ID yang benar.
+
+Bot akan meminta konfirmasi tombol sebelum penghapusan dilakukan.
+
+### `/export`
+
+Mengunduh transaksi dalam file CSV. Tanpa parameter, command ini mengekspor bulan berjalan:
+
+```text
+/export
+```
+
+Untuk bulan tertentu:
+
+```text
+/export bulan:5 tahun:2026
+```
+
+Untuk satu tahun:
+
+```text
+/export tahun:2025
+```
+
+File berisi ID, tanggal, tipe transaksi, nominal, deskripsi, dan saldo berjalan.
+
+### Backup database
+
+Bot membuat backup database otomatis setiap kali container mulai dan menyimpan maksimal 30 backup terbaru di folder `backups/`. Folder tersebut dipasang sebagai volume Docker agar backup tetap ada saat image dibuat ulang.
 
 ### `/budget`
 
