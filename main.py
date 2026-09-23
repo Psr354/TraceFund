@@ -148,24 +148,58 @@ async def riwayat(
         filters.append("date LIKE ?")
         parameters.append(f"{tahun or datetime.now().year:04d}-{bulan:02d}-%")
     where_clause = f" WHERE {' AND '.join(filters)}" if filters else ""
+    period_filtered = bulan is not None or tahun is not None
+    limit_clause = "" if period_filtered else " LIMIT 15"
     with sqlite3.connect(DATABASE_PATH) as connection:
         rows = connection.execute(
             "SELECT id, date, type, amount, description FROM transactions"
             + where_clause
-            + " ORDER BY date DESC, id DESC LIMIT 15",
+            + " ORDER BY date ASC, id ASC"
+            + limit_clause,
             parameters,
         ).fetchall()
     if not rows:
         await interaction.response.send_message("Tidak ada transaksi pada periode tersebut.", ephemeral=True)
         return
-    lines = [
-        f"`#{transaction_id}` {date[:10]} | {transaction_type} | "
-        f"{format_rupiah(amount)} | {description}"
-        for transaction_id, date, transaction_type, amount, description in rows
-    ]
-    await interaction.response.send_message(
-        "**15 transaksi terakhir**\n" + "\n".join(lines), ephemeral=True
+    period = "15 transaksi terakhir"
+    if period_filtered:
+        period = "Detail transaksi"
+        if bulan is not None:
+            period += f" {MONTH_NAMES[bulan - 1]} {tahun or datetime.now().year}"
+        elif tahun is not None:
+            period += f" tahun {tahun}"
+    lines = []
+    income = expense = 0
+    income_count = expense_count = 0
+    for transaction_id, date, transaction_type, amount, description in rows:
+        if transaction_type == "masuk":
+            income += amount
+            income_count += 1
+        else:
+            expense += amount
+            expense_count += 1
+        lines.append(
+            f"`#{transaction_id}` {date[:10]} | {transaction_type:<6} | "
+            f"{format_rupiah(amount):>12} | {description}"
+        )
+    summary = (
+        f"**{period}**\n"
+        f"Pemasukan ({income_count}): {format_rupiah(income)}\n"
+        f"Pengeluaran ({expense_count}): {format_rupiah(expense)}\n"
+        f"Saldo: {format_rupiah(income - expense)}\n\n"
     )
+    chunks = []
+    current_chunk = summary
+    for line in lines:
+        if len(current_chunk) + len(line) + 1 > 1900:
+            chunks.append(current_chunk)
+            current_chunk = "**Detail transaksi (lanjutan)**\n"
+        current_chunk += line + "\n"
+    if current_chunk.strip():
+        chunks.append(current_chunk)
+    await interaction.response.send_message(chunks[0], ephemeral=True)
+    for chunk in chunks[1:]:
+        await interaction.followup.send(chunk, ephemeral=True)
 
 
 @client.tree.command(name="ubah", description="Ubah transaksi berdasarkan ID")
@@ -401,14 +435,14 @@ async def analisis(interaction: discord.Interaction) -> None:
     expense_width = max(len("PENGELUARAN"), *(len(row[2]) for row in formatted_data))
     balance_width = max(len("SALDO"), *(len(row[3]) for row in formatted_data))
     detail_lines = [
-        f"{month:<{month_width}}  {income:>{income_width}}  "
-        f"{expense:>{expense_width}}  {balance:>{balance_width}}"
+        f"{month:<{month_width}}  {income:<{income_width}}  "
+        f"{expense:<{expense_width}}  {balance:<{balance_width}}"
         for month, income, expense, balance in formatted_data
     ]
     chunks = []
     table_header = (
-        f"{'BULAN':<{month_width}}  {'PEMASUKAN':>{income_width}}  "
-        f"{'PENGELUARAN':>{expense_width}}  {'SALDO':>{balance_width}}\n"
+        f"{'BULAN':<{month_width}}  {'PEMASUKAN':<{income_width}}  "
+        f"{'PENGELUARAN':<{expense_width}}  {'SALDO':<{balance_width}}\n"
     )
     table_separator = "-" * len(table_header.rstrip()) + "\n"
     current_chunk = "**Detail Semua Bulan**\n```text\n" + table_header + table_separator

@@ -260,23 +260,31 @@ saldo tahunan = total pemasukan setahun - total pengeluaran setahun
 
 ### `/riwayat`
 
-Melihat maksimal 15 transaksi terakhir beserta ID transaksi.
+Tanpa filter, melihat maksimal 15 transaksi terakhir beserta ID transaksi:
 
 ```text
 /riwayat
 ```
 
-Filter berdasarkan bulan dan tahun:
+Dengan filter bulan dan tahun, semua transaksi pada bulan tersebut ditampilkan, termasuk pemasukan, pengeluaran, total, dan saldo:
 
 ```text
 /riwayat bulan:8 tahun:2025
 ```
 
-Filter berdasarkan tahun:
+Contoh melihat semua transaksi Agustus 2025:
+
+```text
+/riwayat bulan:8 tahun:2025
+```
+
+Filter berdasarkan tahun untuk melihat semua transaksi dalam satu tahun:
 
 ```text
 /riwayat tahun:2025
 ```
+
+Jika detail terlalu panjang, bot membaginya menjadi beberapa pesan ephemeral.
 
 Contoh hasil:
 
