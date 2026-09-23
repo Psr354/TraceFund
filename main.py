@@ -49,13 +49,13 @@ def format_rupiah(amount: int) -> str:
 def format_rupiah_aligned(amount: int, width: int) -> str:
     value = format_rupiah(amount)
     if amount >= 0:
-        value = "  " + value
+        value = " " + value
     return f"{value:<{width}}"
 
 
 def format_rupiah_table(amount: int) -> str:
     value = format_rupiah(amount)
-    return value if amount < 0 else "  " + value
+    return value if amount < 0 else " " + value
 
 
 def format_month(month_key: str) -> str:
