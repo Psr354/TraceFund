@@ -392,15 +392,24 @@ async def analisis(interaction: discord.Interaction) -> None:
         "Detail per bulan akan dikirim setelah pesan ini.",
         ephemeral=True,
     )
-    detail_lines = [
-        f"{format_month(month):<17}"
-        f"{format_rupiah(income):>14}"
-        f"{format_rupiah(expense):>16}"
-        f"{format_rupiah(balance):>14}"
+    formatted_data = [
+        (format_month(month), format_rupiah(income), format_rupiah(expense), format_rupiah(balance))
         for month, income, expense, balance in month_data
     ]
+    month_width = max(len("BULAN"), *(len(row[0]) for row in formatted_data))
+    income_width = max(len("PEMASUKAN"), *(len(row[1]) for row in formatted_data))
+    expense_width = max(len("PENGELUARAN"), *(len(row[2]) for row in formatted_data))
+    balance_width = max(len("SALDO"), *(len(row[3]) for row in formatted_data))
+    detail_lines = [
+        f"{month:<{month_width}}  {income:>{income_width}}  "
+        f"{expense:>{expense_width}}  {balance:>{balance_width}}"
+        for month, income, expense, balance in formatted_data
+    ]
     chunks = []
-    table_header = "BULAN              PEMASUKAN      PENGELUARAN         SALDO\n"
+    table_header = (
+        f"{'BULAN':<{month_width}}  {'PEMASUKAN':>{income_width}}  "
+        f"{'PENGELUARAN':>{expense_width}}  {'SALDO':>{balance_width}}\n"
+    )
     table_separator = "-" * len(table_header.rstrip()) + "\n"
     current_chunk = "**Detail Semua Bulan**\n```text\n" + table_header + table_separator
     for line in detail_lines:
@@ -412,6 +421,34 @@ async def analisis(interaction: discord.Interaction) -> None:
         chunks.append(current_chunk + "```")
     for chunk in chunks:
         await interaction.followup.send(chunk, ephemeral=True)
+
+
+@client.tree.command(name="tahunan", description="Lihat total pemasukan dan pengeluaran dalam satu tahun")
+@app_commands.describe(tahun="Opsional: tahun yang ingin dilihat")
+async def tahunan(interaction: discord.Interaction, tahun: int | None = None) -> None:
+    if not is_allowed_user(interaction):
+        await reject_unauthorized(interaction)
+        return
+    tahun = tahun or datetime.now().year
+    if not 2000 <= tahun <= 2100:
+        await interaction.response.send_message("Tahun harus valid.", ephemeral=True)
+        return
+    with sqlite3.connect(DATABASE_PATH) as connection:
+        rows = connection.execute(
+            "SELECT type, COALESCE(SUM(amount), 0), COUNT(*) "
+            "FROM transactions WHERE date LIKE ? GROUP BY type",
+            (f"{tahun:04d}-%",),
+        ).fetchall()
+    totals = {transaction_type: (amount, count) for transaction_type, amount, count in rows}
+    income, income_count = totals.get("masuk", (0, 0))
+    expense, expense_count = totals.get("keluar", (0, 0))
+    await interaction.response.send_message(
+        f"**Ringkasan Tahunan {tahun}**\n"
+        f"Pemasukan ({income_count} transaksi): {format_rupiah(income)}\n"
+        f"Pengeluaran ({expense_count} transaksi): {format_rupiah(expense)}\n"
+        f"Saldo: {format_rupiah(income - expense)}",
+        ephemeral=True,
+    )
 
 
 @client.tree.error

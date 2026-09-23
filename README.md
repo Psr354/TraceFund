@@ -13,6 +13,7 @@ Bot hanya dapat digunakan oleh satu Discord user yang ID-nya ditentukan melalui 
 | `/ringkasan` | Melihat pemasukan, pengeluaran, dan saldo suatu bulan |
 | `/total` | Menghitung total pengeluaran berdasarkan nama barang/kategori |
 | `/analisis` | Menganalisis seluruh bulan |
+| `/tahunan` | Melihat total pemasukan dan pengeluaran dalam satu tahun |
 | `/riwayat` | Melihat transaksi terakhir |
 | `/ubah` | Mengubah transaksi berdasarkan ID |
 | `/hapus` | Menghapus transaksi berdasarkan ID |
@@ -233,6 +234,29 @@ Hasilnya mencakup:
 - Detail saldo setiap bulan.
 
 Jika detailnya panjang, bot membaginya menjadi beberapa pesan ephemeral agar tidak melewati batas panjang pesan Discord.
+
+### `/tahunan`
+
+Melihat total pemasukan dan pengeluaran dalam satu tahun, termasuk jumlah transaksi dan saldo tahunan.
+
+Tahun berjalan:
+
+```text
+/tahunan
+```
+
+Tahun historis:
+
+```text
+/tahunan tahun:2025
+/tahunan tahun:2024
+```
+
+Saldo tahunan dihitung dengan rumus:
+
+```text
+saldo tahunan = total pemasukan setahun - total pengeluaran setahun
+```
 
 ### `/riwayat`
 
