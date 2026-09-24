@@ -126,8 +126,6 @@ Contoh lain:
 
 ### `/pengeluaran`
 
-Mencatat pengeluaran baru.
-
 ```text
 /pengeluaran nominal:25000 barang:makan
 ```
@@ -195,6 +193,8 @@ Contoh lain:
 ```
 
 `/total barang:bensin` dapat menemukan `bensin`, `Bensin`, `bensin motor`, atau `isi bensin`.
+
+Hasil command juga menampilkan daftar lengkap semua transaksi yang cocok, termasuk ID, tanggal, nominal, dan deskripsi. Jika hasilnya panjang, daftar dibagi menjadi beberapa pesan ephemeral.
 
 Sepanjang seluruh riwayat:
 

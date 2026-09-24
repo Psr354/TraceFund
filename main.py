@@ -572,22 +572,45 @@ async def total(
         filters.append("date LIKE ?")
         parameters.append(f"{tahun or datetime.now().year:04d}-{bulan:02d}-%")
     query = (
-        "SELECT COALESCE(SUM(amount), 0), COUNT(*) FROM transactions WHERE "
+        "SELECT id, date, amount, description FROM transactions WHERE "
         + " AND ".join(filters)
+        + " ORDER BY date ASC, id ASC"
     )
     with sqlite3.connect(DATABASE_PATH) as connection:
-        amount, count = connection.execute(query, parameters).fetchone()
+        rows = connection.execute(query, parameters).fetchall()
+
+    count = len(rows)
+    amount = sum(row[2] for row in rows)
 
     period = "sepanjang waktu"
     if bulan is not None:
         period = f"bulan {bulan:02d}/{tahun or datetime.now().year}"
     elif tahun is not None:
         period = f"tahun {tahun}"
-    await interaction.response.send_message(
+    summary = (
         f"**Total pengeluaran untuk '{barang}' ({period})**\n"
-        f"{count} transaksi: {format_rupiah(amount)}",
-        ephemeral=True,
+        f"{count} transaksi: {format_rupiah(amount)}"
     )
+    if not rows:
+        await interaction.response.send_message(summary + "\nTidak ada transaksi yang cocok.", ephemeral=True)
+        return
+
+    detail_lines = [
+        f"#{transaction_id} {date[:10]} | {format_rupiah(transaction_amount):>12} | {description}"
+        for transaction_id, date, transaction_amount, description in rows
+    ]
+    chunks = []
+    current_chunk = "**Daftar transaksi**\n```text\n"
+    for line in detail_lines:
+        if len(current_chunk) + len(line) + 5 > 1700:
+            chunks.append(current_chunk + "\n```")
+            current_chunk = "**Daftar transaksi (lanjutan)**\n```text\n"
+        current_chunk += line + "\n"
+    chunks.append(current_chunk + "```")
+
+    await interaction.response.send_message(summary + "\n\n" + chunks[0], ephemeral=True)
+    for chunk in chunks[1:]:
+        await interaction.followup.send(chunk, ephemeral=True)
 
 
 @client.tree.command(name="analisis", description="Cari bulan terbaik dan terbesar dari keuanganmu")
