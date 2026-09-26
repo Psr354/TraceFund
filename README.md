@@ -170,7 +170,15 @@ saldo = total pemasukan - total pengeluaran
 
 ### `/total`
 
-Menghitung total pengeluaran berdasarkan teks yang terdapat di deskripsi barang. Pencarian tidak membedakan huruf besar dan kecil.
+Menghitung total pengeluaran. Jika `barang` diisi, pencarian dilakukan berdasarkan teks yang terdapat di deskripsi barang dan tidak membedakan huruf besar dan kecil. Jika `barang` dikosongkan, semua item yang pernah dibeli akan ditampilkan.
+
+Seluruh item yang pernah dibeli:
+
+```text
+/total
+```
+
+Command ini menampilkan total seluruh pengeluaran dan daftar lengkap transaksinya.
 
 ```text
 /total barang:cukur

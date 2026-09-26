@@ -539,23 +539,20 @@ async def ringkasan(
 
 @client.tree.command(name="total", description="Hitung total pengeluaran untuk suatu barang")
 @app_commands.describe(
-    barang="Nama barang atau kategori, misalnya cukur atau bensin",
+    barang="Opsional: nama barang atau kategori, misalnya cukur atau bensin",
     bulan="Opsional: bulan 1-12",
     tahun="Opsional: tahun",
 )
 async def total(
     interaction: discord.Interaction,
-    barang: str,
+    barang: str | None = None,
     bulan: int | None = None,
     tahun: int | None = None,
 ) -> None:
     if not is_allowed_user(interaction):
         await reject_unauthorized(interaction)
         return
-    barang = barang.strip()
-    if not barang:
-        await interaction.response.send_message("Nama barang tidak boleh kosong.", ephemeral=True)
-        return
+    barang = barang.strip() if barang else None
     if bulan is not None and not 1 <= bulan <= 12:
         await interaction.response.send_message("Bulan harus 1-12.", ephemeral=True)
         return
@@ -563,8 +560,11 @@ async def total(
         await interaction.response.send_message("Tahun harus valid.", ephemeral=True)
         return
 
-    filters = ["type = 'keluar'", "description LIKE ? COLLATE NOCASE"]
-    parameters: list[object] = [f"%{barang}%"]
+    filters = ["type = 'keluar'"]
+    parameters: list[object] = []
+    if barang:
+        filters.append("description LIKE ? COLLATE NOCASE")
+        parameters.append(f"%{barang}%")
     if tahun is not None:
         filters.append("date LIKE ?")
         parameters.append(f"{tahun:04d}-%")
@@ -587,10 +587,8 @@ async def total(
         period = f"bulan {bulan:02d}/{tahun or datetime.now().year}"
     elif tahun is not None:
         period = f"tahun {tahun}"
-    summary = (
-        f"**Total pengeluaran untuk '{barang}' ({period})**\n"
-        f"{count} transaksi: {format_rupiah(amount)}"
-    )
+    summary_title = f"Total pengeluaran untuk '{barang}'" if barang else "Seluruh pengeluaran"
+    summary = f"**{summary_title} ({period})**\n{count} transaksi: {format_rupiah(amount)}"
     if not rows:
         await interaction.response.send_message(summary + "\nTidak ada transaksi yang cocok.", ephemeral=True)
         return
