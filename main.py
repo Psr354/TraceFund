@@ -269,8 +269,18 @@ async def riwayat(
         table_lines.extend(income_values or ["Tidak ada transaksi."])
         table_lines.extend(["", "PENGELUARAN", "-" * 12])
         table_lines.extend(expense_values or ["Tidak ada transaksi."])
-        table = "```text\n" + "\n".join(table_lines) + "\n```"
-        await interaction.response.send_message(summary + table, ephemeral=True)
+        chunks = []
+        current_chunk = summary + "```text\n"
+        for line in table_lines:
+            candidate = current_chunk + line + "\n```"
+            if len(candidate) > 1900 and current_chunk != summary + "```text\n":
+                chunks.append(current_chunk + "```")
+                current_chunk = "**Detail transaksi (lanjutan)**\n```text\n"
+            current_chunk += line + "\n"
+        chunks.append(current_chunk + "```")
+        await interaction.response.send_message(chunks[0], ephemeral=True)
+        for chunk in chunks[1:]:
+            await interaction.followup.send(chunk, ephemeral=True)
         return
 
     lines = [
