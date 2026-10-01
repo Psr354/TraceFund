@@ -249,8 +249,8 @@ async def riwayat(
             for transaction_id, date, transaction_type, amount, description in rows
             if transaction_type == "keluar"
         ]
-        income_width = max(12, *(len(format_rupiah(amount)) for _, _, amount, _ in income_rows))
-        expense_width = max(12, *(len(format_rupiah(amount)) for _, _, amount, _ in expense_rows))
+        income_width = max([12, *(len(format_rupiah(amount)) for _, _, amount, _ in income_rows)])
+        expense_width = max([12, *(len(format_rupiah(amount)) for _, _, amount, _ in expense_rows)])
         income_values = [
             f"#{transaction_id} {date} {format_rupiah_aligned(amount, income_width)} {description}"
             for transaction_id, date, amount, description in income_rows
