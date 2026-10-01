@@ -273,7 +273,7 @@ async def riwayat(
         current_chunk = summary + "```text\n"
         for line in table_lines:
             candidate = current_chunk + line + "\n```"
-            if len(candidate) > 1900 and current_chunk != summary + "```text\n":
+            if len(candidate) > 1800 and current_chunk != summary + "```text\n":
                 chunks.append(current_chunk + "```")
                 current_chunk = "**Detail transaksi (lanjutan)**\n```text\n"
             current_chunk += line + "\n"
@@ -726,7 +726,8 @@ async def tahunan(interaction: discord.Interaction, tahun: int | None = None) ->
 
 @client.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
-    logger.error("Command error", exc_info=error)
+    command_name = interaction.command.name if interaction.command else "unknown"
+    logger.error("Command error in /%s", command_name, exc_info=error)
     if isinstance(error, app_commands.CommandInvokeError) and isinstance(error.original, sqlite3.Error):
         message = "Database sedang bermasalah. Cek log bot."
     else:
