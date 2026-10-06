@@ -56,14 +56,17 @@ def parse_file(path: Path) -> list[tuple[str, str, int, str]]:
     return transactions
 
 
-def seed_database(source_dir: str = r"C:\Users\BEST LAPTOP\Downloads\pengeluaran uang"):
+def seed_database(
+    source_dir: str = r"C:\Users\BEST LAPTOP\Downloads\pengeluaran uang",
+    database_path: str = "tracefund.db",
+):
     source = Path(source_dir)
     files = sorted(source.glob("*.md"))
     if not files:
         raise FileNotFoundError(f"Tidak ada file Markdown di {source}")
 
     transactions = [row for path in files for row in parse_file(path)]
-    with sqlite3.connect("tracefund.db") as connection:
+    with sqlite3.connect(database_path) as connection:
         connection.execute("""CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL,
@@ -76,7 +79,7 @@ def seed_database(source_dir: str = r"C:\Users\BEST LAPTOP\Downloads\pengeluaran
             "INSERT INTO transactions (date, type, amount, description) VALUES (?, ?, ?, ?)",
             transactions,
         )
-    print(f"Mengimpor {len(transactions)} transaksi dari {len(files)} file ke tracefund.db")
+    print(f"Mengimpor {len(transactions)} transaksi dari {len(files)} file ke {database_path}")
 
 
 if __name__ == "__main__":
@@ -86,5 +89,10 @@ if __name__ == "__main__":
         default=r"C:\Users\BEST LAPTOP\Downloads\pengeluaran uang",
         help="Folder yang berisi file Markdown transaksi",
     )
+    parser.add_argument(
+        "--database",
+        default="tracefund.db",
+        help="File SQLite tujuan",
+    )
     args = parser.parse_args()
-    seed_database(args.source_dir)
+    seed_database(args.source_dir, args.database)

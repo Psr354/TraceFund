@@ -6,6 +6,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./tracefund.db:/app/tracefund.db
+      - ./tracefund-user-1.db:/app/tracefund-user-1.db
+      - ./tracefund-user-2.db:/app/tracefund-user-2.db
       - ./backups:/app/backups
     network_mode: default

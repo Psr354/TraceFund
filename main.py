@@ -12,14 +12,33 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-try:
-    ALLOWED_USER_ID = int(os.environ["ALLOWED_USER_ID"])
-except (KeyError, ValueError):
-    raise RuntimeError("ALLOWED_USER_ID harus berupa angka di file .env")
 if not DISCORD_TOKEN:
     raise RuntimeError("DISCORD_TOKEN belum diisi di file .env")
 
-DATABASE_PATH = "tracefund.db"
+def load_user_databases() -> dict[int, str]:
+    configured = os.getenv("USER_DATABASES")
+    if configured:
+        databases = {}
+        for entry in configured.split(","):
+            try:
+                user_id, database_path = entry.strip().split("=", 1)
+                databases[int(user_id)] = database_path.strip()
+            except (ValueError, AttributeError):
+                raise RuntimeError(
+                    "USER_DATABASES harus berformat user_id=database.db,user_id=database.db"
+                )
+        if databases and all(databases.values()):
+            return databases
+        raise RuntimeError("USER_DATABASES tidak boleh kosong")
+
+    try:
+        allowed_user_id = int(os.environ["ALLOWED_USER_ID"])
+    except (KeyError, ValueError):
+        raise RuntimeError("Isi USER_DATABASES atau ALLOWED_USER_ID yang valid di file .env")
+    return {allowed_user_id: "tracefund.db"}
+
+
+USER_DATABASES = load_user_databases()
 BACKUP_DIR = "backups"
 BACKUP_RETENTION = 30
 MONTH_NAMES = (
@@ -30,16 +49,21 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger("tracefund")
 
 
-def create_database_backup() -> None:
-    if not os.path.exists(DATABASE_PATH):
+def database_path(user_id: int) -> str:
+    return USER_DATABASES[user_id]
+
+
+def create_database_backup(user_id: int, database: str) -> None:
+    if not os.path.exists(database):
         return
-    os.makedirs(BACKUP_DIR, exist_ok=True)
+    user_backup_dir = os.path.join(BACKUP_DIR, str(user_id))
+    os.makedirs(user_backup_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup_path = os.path.join(BACKUP_DIR, f"tracefund-{timestamp}.db")
-    with sqlite3.connect(DATABASE_PATH) as source, sqlite3.connect(backup_path) as target:
+    backup_path = os.path.join(user_backup_dir, f"tracefund-{timestamp}.db")
+    with sqlite3.connect(database) as source, sqlite3.connect(backup_path) as target:
         source.backup(target)
     backups = sorted(
-        (os.path.join(BACKUP_DIR, name) for name in os.listdir(BACKUP_DIR) if name.endswith(".db")),
+        (os.path.join(user_backup_dir, name) for name in os.listdir(user_backup_dir) if name.endswith(".db")),
         key=os.path.getmtime,
         reverse=True,
     )
@@ -48,8 +72,8 @@ def create_database_backup() -> None:
     logger.info("Backup database dibuat: %s", backup_path)
 
 
-def initialize_database() -> None:
-    with sqlite3.connect(DATABASE_PATH) as connection:
+def initialize_database(user_id: int, database: str) -> None:
+    with sqlite3.connect(database) as connection:
         connection.execute("""CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL,
@@ -61,7 +85,7 @@ def initialize_database() -> None:
             month TEXT PRIMARY KEY,
             amount INTEGER NOT NULL CHECK(amount > 0)
         )""")
-    create_database_backup()
+    create_database_backup(user_id, database)
 
 
 def get_running_balances(connection: sqlite3.Connection) -> dict[int, int]:
@@ -105,7 +129,7 @@ def format_month_short(month_key: str) -> str:
 
 
 def is_allowed_user(interaction: discord.Interaction) -> bool:
-    return interaction.user.id == ALLOWED_USER_ID
+    return interaction.user.id in USER_DATABASES
 
 
 async def reject_unauthorized(interaction: discord.Interaction) -> None:
@@ -123,7 +147,8 @@ class TraceFundClient(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self) -> None:
-        initialize_database()
+        for user_id, database in USER_DATABASES.items():
+            initialize_database(user_id, database)
         synced = await self.tree.sync()
         logger.info("Berhasil sync %d slash command", len(synced))
 
@@ -147,7 +172,7 @@ async def pemasukan(interaction: discord.Interaction, nominal: int, deskripsi: s
     if nominal <= 0:
         await interaction.response.send_message("Nominal harus lebih dari 0.", ephemeral=True)
         return
-    with sqlite3.connect(DATABASE_PATH) as connection:
+    with sqlite3.connect(database_path(interaction.user.id)) as connection:
         connection.execute(
             "INSERT INTO transactions (date, type, amount, description) VALUES (?, 'masuk', ?, ?)",
             (datetime.now().isoformat(timespec="seconds"), nominal, deskripsi.strip()),
@@ -167,7 +192,7 @@ async def pengeluaran(interaction: discord.Interaction, nominal: int, barang: st
     if nominal <= 0:
         await interaction.response.send_message("Nominal harus lebih dari 0.", ephemeral=True)
         return
-    with sqlite3.connect(DATABASE_PATH) as connection:
+    with sqlite3.connect(database_path(interaction.user.id)) as connection:
         connection.execute(
             "INSERT INTO transactions (date, type, amount, description) VALUES (?, 'keluar', ?, ?)",
             (datetime.now().isoformat(timespec="seconds"), nominal, barang.strip()),
@@ -203,7 +228,7 @@ async def riwayat(
     where_clause = f" WHERE {' AND '.join(filters)}" if filters else ""
     period_filtered = bulan is not None or tahun is not None
     limit_clause = "" if period_filtered else " LIMIT 15"
-    with sqlite3.connect(DATABASE_PATH) as connection:
+    with sqlite3.connect(database_path(interaction.user.id)) as connection:
         rows = connection.execute(
             "SELECT id, date, type, amount, description FROM transactions"
             + where_clause
@@ -331,7 +356,7 @@ async def export(
         parameters.append(f"{now.year:04d}-{bulan:02d}-%")
 
     where_clause = f" WHERE {' AND '.join(filters)}" if filters else ""
-    with sqlite3.connect(DATABASE_PATH) as connection:
+    with sqlite3.connect(database_path(interaction.user.id)) as connection:
         rows = connection.execute(
             "SELECT id, date, type, amount, description FROM transactions"
             + where_clause
@@ -382,7 +407,7 @@ class DeleteConfirmationView(discord.ui.View):
 
     @discord.ui.button(label="Konfirmasi hapus", style=discord.ButtonStyle.danger)
     async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        with sqlite3.connect(DATABASE_PATH) as connection:
+        with sqlite3.connect(database_path(interaction.user.id)) as connection:
             cursor = connection.execute("DELETE FROM transactions WHERE id = ?", (self.transaction_id,))
         for item in self.children:
             item.disabled = True
@@ -410,7 +435,7 @@ async def ubah(interaction: discord.Interaction, id_transaksi: int, nominal: int
     if nominal <= 0 or not deskripsi.strip():
         await interaction.response.send_message("Nominal harus lebih dari 0 dan deskripsi wajib diisi.", ephemeral=True)
         return
-    with sqlite3.connect(DATABASE_PATH) as connection:
+    with sqlite3.connect(database_path(interaction.user.id)) as connection:
         cursor = connection.execute(
             "UPDATE transactions SET amount = ?, description = ? WHERE id = ?",
             (nominal, deskripsi.strip(), id_transaksi),
@@ -427,7 +452,7 @@ async def hapus(interaction: discord.Interaction, id_transaksi: int) -> None:
     if not is_allowed_user(interaction):
         await reject_unauthorized(interaction)
         return
-    with sqlite3.connect(DATABASE_PATH) as connection:
+    with sqlite3.connect(database_path(interaction.user.id)) as connection:
         transaction = connection.execute(
             "SELECT date, type, amount, description FROM transactions WHERE id = ?",
             (id_transaksi,),
@@ -466,7 +491,7 @@ async def budget(
         return
     now = datetime.now()
     month_key = f"{tahun or now.year:04d}-{bulan or now.month:02d}"
-    with sqlite3.connect(DATABASE_PATH) as connection:
+    with sqlite3.connect(database_path(interaction.user.id)) as connection:
         connection.execute(
             "INSERT INTO budgets (month, amount) VALUES (?, ?) "
             "ON CONFLICT(month) DO UPDATE SET amount = excluded.amount",
@@ -491,7 +516,7 @@ async def cekbudget(
         return
     now = datetime.now()
     month_key = f"{tahun or now.year:04d}-{bulan or now.month:02d}"
-    with sqlite3.connect(DATABASE_PATH) as connection:
+    with sqlite3.connect(database_path(interaction.user.id)) as connection:
         budget_row = connection.execute("SELECT amount FROM budgets WHERE month = ?", (month_key,)).fetchone()
         spent = connection.execute(
             "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'keluar' AND date LIKE ?",
@@ -530,7 +555,7 @@ async def ringkasan(
         await interaction.response.send_message("Bulan harus 1-12 dan tahun harus valid.", ephemeral=True)
         return
     prefix = f"{tahun:04d}-{bulan:02d}-%"
-    with sqlite3.connect(DATABASE_PATH) as connection:
+    with sqlite3.connect(database_path(interaction.user.id)) as connection:
         rows = connection.execute(
             "SELECT type, COALESCE(SUM(amount), 0), COUNT(*) FROM transactions WHERE date LIKE ? GROUP BY type",
             (prefix,),
@@ -586,7 +611,7 @@ async def total(
         + " AND ".join(filters)
         + " ORDER BY date ASC, id ASC"
     )
-    with sqlite3.connect(DATABASE_PATH) as connection:
+    with sqlite3.connect(database_path(interaction.user.id)) as connection:
         rows = connection.execute(query, parameters).fetchall()
 
     count = len(rows)
@@ -626,7 +651,7 @@ async def analisis(interaction: discord.Interaction) -> None:
     if not is_allowed_user(interaction):
         await reject_unauthorized(interaction)
         return
-    with sqlite3.connect(DATABASE_PATH) as connection:
+    with sqlite3.connect(database_path(interaction.user.id)) as connection:
         rows = connection.execute("""
             SELECT substr(date, 1, 7) AS month,
                    COALESCE(SUM(CASE WHEN type = 'masuk' THEN amount ELSE 0 END), 0) AS income,
@@ -706,7 +731,7 @@ async def tahunan(interaction: discord.Interaction, tahun: int | None = None) ->
     if not 2000 <= tahun <= 2100:
         await interaction.response.send_message("Tahun harus valid.", ephemeral=True)
         return
-    with sqlite3.connect(DATABASE_PATH) as connection:
+    with sqlite3.connect(database_path(interaction.user.id)) as connection:
         rows = connection.execute(
             "SELECT type, COALESCE(SUM(amount), 0), COUNT(*) "
             "FROM transactions WHERE date LIKE ? GROUP BY type",
