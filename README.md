@@ -185,7 +185,7 @@ Gunakan ID yang tampil pada `/riwayat` saat mengubah atau menghapus transaksi. `
 - `/riwayat` dengan filter menampilkan seluruh transaksi yang cocok. Tanpa filter, implementasi saat ini mengambil maksimal **15 transaksi paling awal**, meskipun label respons menyebut transaksi terakhir.
 - `/export` tanpa parameter mengekspor bulan berjalan; hanya `tahun` mengekspor satu tahun penuh.
 - Untuk `/total`, `/riwayat`, dan `/export`, hanya `bulan` memakai tahun berjalan; hanya `tahun` mencakup seluruh tahun tersebut.
-- Saldo ringkasan adalah pemasukan dikurangi pengeluaran pada periode yang dipilih. Saldo berjalan pada riwayat dan CSV dihitung dari seluruh transaksi, menurut tanggal lalu ID.
+- Pada ringkasan `/riwayat`, `Saldo` menampilkan total sisa uang kas saat ini, sedangkan `Selisih` adalah pemasukan dikurangi pengeluaran pada periode yang dipilih. Saldo berjalan pada riwayat dan CSV dihitung dari seluruh transaksi, menurut tanggal lalu ID.
 
 Tanggal pencatatan dan periode berjalan mengikuti waktu lokal sistem yang menjalankan bot. Tidak ada konfigurasi zona waktu khusus di aplikasi.
 

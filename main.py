@@ -237,6 +237,9 @@ async def riwayat(
             parameters,
         ).fetchall()
         running_balances = get_running_balances(connection)
+        current_balance = connection.execute(
+            "SELECT COALESCE(SUM(CASE WHEN type = 'masuk' THEN amount ELSE -amount END), 0) FROM transactions"
+        ).fetchone()[0]
     if not rows:
         await interaction.response.send_message("Tidak ada transaksi pada periode tersebut.", ephemeral=True)
         return
@@ -261,7 +264,8 @@ async def riwayat(
         f"**{period}**\n"
         f"Pemasukan ({income_count}): {format_rupiah(income)}\n"
         f"Pengeluaran ({expense_count}): {format_rupiah(expense)}\n"
-        f"Saldo: {format_rupiah(income - expense)}\n\n"
+        f"Saldo: {format_rupiah(current_balance)}\n"
+        f"Selisih: {format_rupiah(income - expense)}\n\n"
     )
     if period_filtered:
         income_rows = [
