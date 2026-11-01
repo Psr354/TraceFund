@@ -564,6 +564,9 @@ async def ringkasan(
             "SELECT type, COALESCE(SUM(amount), 0), COUNT(*) FROM transactions WHERE date LIKE ? GROUP BY type",
             (prefix,),
         ).fetchall()
+        current_balance = connection.execute(
+            "SELECT COALESCE(SUM(CASE WHEN type = 'masuk' THEN amount ELSE -amount END), 0) FROM transactions"
+        ).fetchone()[0]
     totals = {transaction_type: (amount, count) for transaction_type, amount, count in rows}
     masuk, masuk_count = totals.get("masuk", (0, 0))
     keluar, keluar_count = totals.get("keluar", (0, 0))
@@ -571,7 +574,8 @@ async def ringkasan(
         f"**Ringkasan {bulan:02d}/{tahun}**\n"
         f"Pemasukan ({masuk_count}): {format_rupiah(masuk)}\n"
         f"Pengeluaran ({keluar_count}): {format_rupiah(keluar)}\n"
-        f"Saldo: {format_rupiah(masuk - keluar)}",
+        f"Saldo: {format_rupiah(current_balance)}\n"
+        f"Selisih: {format_rupiah(masuk - keluar)}",
         ephemeral=True,
     )
 
